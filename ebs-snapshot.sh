@@ -67,8 +67,8 @@ show_help() {
 cat << EOF
 Usage: ${0##*/} ...
 
-	--device			Optional -- the device path on this instance you want to snapshot.
-							If you leave this out, all volumes will be snapshotted.
+	--device		Optional -- the device path on this instance you want to snapshot.
+					If you leave this out, all volumes will be snapshotted.
 	--retention-days	Number of days to retain snapshots.  Default is 7 days.
 EOF
 }
