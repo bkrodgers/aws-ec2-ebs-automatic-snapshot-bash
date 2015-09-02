@@ -200,3 +200,4 @@ fi
 
 snapshot_volumes
 cleanup_snapshots
+exit 0
