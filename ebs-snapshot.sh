@@ -1,10 +1,7 @@
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin/:/usr/bin
 
-# Safety feature: exit script if error is returned, or if variables not set.
-# Exit if a pipeline results in an error.
-set -ue
-set -o pipefail
+
 
 ## Automatic EBS Volume Snapshot Creation & Clean-Up Script
 #
@@ -62,9 +59,18 @@ prerequisite_check() {
 	for prerequisite in aws wget; do
 		hash $prerequisite &> /dev/null
 		if [[ $? == 1 ]]; then
-			echo "In order to use this script, the executable \"$prerequisite\" must be installed." 1>&2; exit 70
+			log "In order to use this script, the executable \"$prerequisite\" must be installed." 1>&2; exit 70
 		fi
 	done
+}
+show_help() {
+cat << EOF
+Usage: ${0##*/} ...
+
+    --device             Optional -- the device path on this instance you want to snapshot.
+    						If you leave this out, all volumes will be snapshotted.
+	--retention-days     Number of days to retain snapshots.  Default is 7 days.
+EOF
 }
 
 # Function: Snapshot all volumes attached to this instance.
@@ -111,11 +117,86 @@ cleanup_snapshots() {
 
 ## SCRIPT COMMANDS ##
 
+device_to_snapshot=""
+
+while :; do
+    case $1 in
+        -h|-\?|--help)   # Call a "show_help" function to display a synopsis, then exit.
+            show_help
+            exit
+            ;;
+
+        --device)       # Takes an option argument, ensuring it has been specified.
+            if [ -n "$2" ]; then
+                device_to_snapshot=$2
+                shift 2
+                continue
+            else
+                printf 'ERROR: "--device" requires a non-empty option argument.\n' >&2
+                exit 1
+            fi
+            ;;
+        --device=?*)
+            device_to_snapshot=${1#*=} # Delete everything up to "=" and assign the remainder.
+            ;;
+        --device=)         # Handle the case of an empty --<arg>=
+            printf 'ERROR: "--device" requires a non-empty option argument.\n' >&2
+            exit 1
+            ;;
+
+        --retention-days)       # Takes an option argument, ensuring it has been specified.
+            if [ -n "$2" ]; then
+                retention_days=$2
+                shift 2
+                continue
+            else
+                printf 'ERROR: "--retention-days" requires a non-empty option argument.\n' >&2
+                exit 1
+            fi
+            ;;
+        --retention-days=?*)
+            retention_days=${1#*=} # Delete everything up to "=" and assign the remainder.
+            ;;
+        --retention-days=)         # Handle the case of an empty --<arg>=
+            printf 'ERROR: "--retention-days" requires a non-empty option argument.\n' >&2
+            exit 1
+            ;;
+
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'ERROR: Unknown option: %s\n' "$1" >&2
+            show_help
+            exit 1
+            ;;
+        *)               # Default case: If no more options then break out of the loop.
+            break
+    esac
+
+    command shift        # "command" reduces the chance of fatal errors in many shells.
+done
+
+# Safety feature: exit script if error is returned, or if variables not set.
+# Exit if a pipeline results in an error.
+set -ue
+set -o pipefail
+
 log_setup
 prerequisite_check
 
-# Grab all volume IDs attached to this instance
-volume_list=$(aws ec2 describe-volumes --region $region --filters Name=attachment.instance-id,Values=$instance_id --query Volumes[].VolumeId --output text)
+if [ -n "$device_to_snapshot" ] ; then
+	# Get volume ID for the device
+	volume_list=$(aws ec2 describe-volumes --region $region --filters Name=attachment.instance-id,Values=$instance_id Name=attachment.device,Values=$device_to_snapshot --query Volumes[].VolumeId --output text)
+	if [ -z "$volume_list" ] ; then
+		log "Could not find volume for device $device_to_snapshot"
+		exit 1
+	fi
+else
+	# Grab all volume IDs attached to this instance
+	volume_list=$(aws ec2 describe-volumes --region $region --filters Name=attachment.instance-id,Values=$instance_id --query Volumes[].VolumeId --output text)
+fi
 
 snapshot_volumes
 cleanup_snapshots
