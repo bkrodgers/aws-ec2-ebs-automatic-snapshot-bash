@@ -82,7 +82,7 @@ snapshot_volumes() {
 		device_name=$(aws ec2 describe-volumes --region $region --output=text --volume-ids $volume_id --query 'Volumes[0].{Devices:Attachments[0].Device}')
 
 		# Take a snapshot of the current volume, and capture the resulting snapshot ID
-		snapshot_description="$(hostname)-$device_name-backup-$(date +%Y-%m-%d)"
+		snapshot_description="$instance_id-$device_name-backup-$(date +%Y-%m-%d)"
 
 		snapshot_id=$(aws ec2 create-snapshot --region $region --output=text --description $snapshot_description --volume-id $volume_id --query SnapshotId)
 		log "New snapshot is $snapshot_id"
