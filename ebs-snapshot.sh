@@ -83,13 +83,21 @@ snapshot_volumes() {
 
 		# Take a snapshot of the current volume, and capture the resulting snapshot ID
 		snapshot_description="$instance_id-$device_name-backup-$(date +%Y-%m-%d)"
+		# Don't include the hostname when running inside docker.  It doesn't mean anything.
+		if [ !  -f /.dockerinit ]; then
+			snapshot_description="$(hostname)-$snapshot_description"
+		fi
 
 		snapshot_id=$(aws ec2 create-snapshot --region $region --output=text --description $snapshot_description --volume-id $volume_id --query SnapshotId)
 		log "New snapshot is $snapshot_id"
 	 
 		# Add a "CreatedBy:AutomatedBackup" tag to the resulting snapshot.
 		# Why? Because we only want to purge snapshots taken by the script later, and not delete snapshots manually taken.
-		aws ec2 create-tags --region $region --resource $snapshot_id --tags Key=CreatedBy,Value=AutomatedBackup
+		# Also tag with the instance and the instance device the backup was created from.
+		aws ec2 create-tags --region $region --resource $snapshot_id --tags \
+			Key=CreatedBy,Value=AutomatedBackup \
+			Key=CreatedFromInstance,Value=$instance_id \
+			Key=InstanceDevice,Value=$device_name
 	done
 }
 
